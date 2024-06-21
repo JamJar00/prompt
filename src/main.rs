@@ -10,6 +10,9 @@ use colored::Colorize;
 struct Args {
     #[arg(short, long, default_value_t = 0)]
     exit_code: u8,
+
+    #[arg(short, long)]
+    message: Option<String>,
 }
 
 fn get_current_working_directory() -> PathBuf {
@@ -250,5 +253,17 @@ fn main() {
         chevron_c = "❯".bold();
     }
 
-    println!("\n{} {} {} {} {} {}\n{}{}{} ", format!("{}", current_dir.display()).cyan().bold(), current_branch.purple().bold(), current_context.bright_blue().bold(), current_namespace.bright_blue().bold(), aws_profile.red().bold(), aws_region.red().bold(), chevron_a, chevron_b, chevron_c);
+    println!(
+        "\n{} {} {} {} {} {} {}\n{}{}{} ",
+        format!("{}", current_dir.display()).cyan().bold(),
+        args.message.unwrap_or("".to_string()).green().bold(),
+        current_branch.purple().bold(),
+        current_context.bright_blue().bold(),
+        current_namespace.bright_blue().bold(),
+        aws_profile.red().bold(),
+        aws_region.red().bold(),
+        chevron_a,
+        chevron_b,
+        chevron_c
+    );
 }

@@ -4,6 +4,7 @@ use std::process::Command;
 
 use clap::Parser;
 use colored::Colorize;
+use homedir::get_my_home;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -16,10 +17,14 @@ struct Args {
 }
 
 fn get_current_working_directory() -> PathBuf {
-    let mut current_dir = env::current_dir().expect("No current working directory?");
-    let home_dir = std::env::home_dir().expect("No home directory?");
-    if current_dir.starts_with(&home_dir) {
-        current_dir = Path::new("~").join(current_dir.strip_prefix(&home_dir).unwrap());
+    let current_dir = env::current_dir().expect("No current working directory?");
+
+    if let Ok(Some(home_dir)) = get_my_home() {
+        if current_dir.starts_with(&home_dir) {
+            return Path::new("~").join(current_dir.strip_prefix(&home_dir).unwrap());
+        }
+
+        return current_dir;
     }
 
     current_dir
@@ -120,7 +125,8 @@ fn get_unstaged_changes() -> UnstagedChanges {
 enum UnpushedChanges {
     None,
     UnpushedChanges,
-    UnpulledChanges
+    UnpulledChanges,
+    NoUpstreamBranch
 }
 
 fn get_unpushed_changes() -> UnpushedChanges {
@@ -147,10 +153,16 @@ fn get_unpushed_changes() -> UnpushedChanges {
 
         let u = String::from_utf8(output3.unwrap().stdout).map_or(None, |mut x| {
             x.retain(|c| !c.is_whitespace());
-            Some(x)
+            if x.len() == 0 {
+                None
+            } else {
+                Some(x)
+            }
         });
 
-        if head == u {
+        if u.is_none() {
+            return UnpushedChanges::NoUpstreamBranch;
+        } else if head == u {
             return UnpushedChanges::None;
         } else {
             return UnpushedChanges::UnpulledChanges;
@@ -246,7 +258,8 @@ fn main() {
         chevron_c = match unpushed_changes {
             UnpushedChanges::None => "❯".green().bold(),
             UnpushedChanges::UnpushedChanges => "❯".yellow().bold(),
-            UnpushedChanges::UnpulledChanges => "❯".blue().bold()
+            UnpushedChanges::UnpulledChanges => "❯".blue().bold(),
+            UnpushedChanges::NoUpstreamBranch => "❯".white().bold()
         };
     } else {
         chevron_b = "❯".bold();

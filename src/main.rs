@@ -71,7 +71,11 @@ async fn get_git_tag() -> Option<String> {
 
     String::from_utf8(output.unwrap().stdout).map_or(None, |mut x| {
         x.retain(|c| !c.is_whitespace());
-        Some(x)
+        if x.len() == 0 {
+            None
+        } else {
+            Some(x)
+        }
     })
 }
 
@@ -88,7 +92,11 @@ async fn get_git_branch() -> Option<String> {
 
     String::from_utf8(output.unwrap().stdout).map_or(None, |mut x| {
         x.retain(|c| !c.is_whitespace());
-        Some(x)
+        if x.len() == 0 {
+            None
+        } else {
+            Some(x)
+        }
     })
 }
 

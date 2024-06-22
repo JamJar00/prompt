@@ -1,9 +1,10 @@
 use std::env;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
+use async_process::Command;
 use clap::Parser;
 use colored::Colorize;
+use futures::FutureExt;
 use homedir::get_my_home;
 
 #[derive(Parser, Debug)]
@@ -30,11 +31,12 @@ fn get_current_working_directory() -> PathBuf {
     current_dir
 }
 
-fn is_in_git_repository() -> bool {
+async fn is_in_git_repository() -> bool {
     let output = Command::new("git")
         .arg("rev-parse")
         .arg("--is-inside-work-tree")
-        .output();
+        .output()
+        .await;
 
     if output.is_err() {
         return false
@@ -46,19 +48,22 @@ fn is_in_git_repository() -> bool {
     })
 }
 
-fn get_best_git_name() -> String {
-    let branch = get_git_branch();
-    let tag = get_git_tag();
+async fn get_best_git_name() -> String {
+    let branch_future = get_git_branch();
+    let tag_future = get_git_tag();
+
+    let (branch, tag) = futures::join!(branch_future, tag_future);
 
     branch.unwrap_or("".to_owned()) + &tag.as_ref().map(|t| " [".to_string() + t + "]").unwrap_or("".to_string())
 }
 
-fn get_git_tag() -> Option<String> {
+async fn get_git_tag() -> Option<String> {
     let output = Command::new("git")
         .arg("tag")
         .arg("--points-at")
         .arg("HEAD")
-        .output();
+        .output()
+        .await;
 
     if output.is_err() {
         return Option::None
@@ -70,11 +75,12 @@ fn get_git_tag() -> Option<String> {
     })
 }
 
-fn get_git_branch() -> Option<String> {
+async fn get_git_branch() -> Option<String> {
     let output = Command::new("git")
         .arg("branch")
         .arg("--show-current")
-        .output();
+        .output()
+        .await;
 
     if output.is_err() {
         return Option::None
@@ -92,25 +98,26 @@ enum UnstagedChanges {
     FilesNotAdded
 }
 
-fn get_unstaged_changes() -> UnstagedChanges {
-    let output1 = Command::new("git")
+async fn get_unstaged_changes() -> UnstagedChanges {
+    let output1_future = Command::new("git")
         .arg("diff")
         .arg("--quiet")
         .output();
 
-    let output2 = Command::new("git")
+    let output2_future = Command::new("git")
         .arg("diff")
         .arg("--cached")
         .arg("--quiet")
         .output();
 
-    if output1.is_ok() && output2.is_ok() {
+    if futures::try_join!(output1_future, output2_future).is_ok() {
         let output3 = Command::new("git")
             .arg("ls-files")
             .arg("--other")
             .arg("--directort")
             .arg("--exclude-standard")
-            .output();
+            .output()
+            .await;
 
         if output3.map(|x| x.stdout.len() == 0).unwrap_or(false) {
             return UnstagedChanges::None;
@@ -129,27 +136,30 @@ enum UnpushedChanges {
     NoUpstreamBranch
 }
 
-fn get_unpushed_changes() -> UnpushedChanges {
+async fn get_unpushed_changes() -> UnpushedChanges {
     let output1 = Command::new("git")
         .arg("log")
         .arg("@{u}..")
-        .output();
+        .output()
+        .await;
 
     if output1.map(|x| x.stdout.len() == 0).unwrap_or(false) {
-        let output2 = Command::new("git")
+        let output2_future = Command::new("git")
             .arg("rev-parse")
             .arg("HEAD")
             .output();
+
+        let output3_future = Command::new("git")
+            .arg("rev-parse")
+            .arg("@{u}")
+            .output();
+
+        let (output2, output3) = futures::join!(output2_future, output3_future);
 
         let head = String::from_utf8(output2.unwrap().stdout).map_or(None, |mut x| {
             x.retain(|c| !c.is_whitespace());
             Some(x)
         });
-
-        let output3 = Command::new("git")
-            .arg("rev-parse")
-            .arg("@{u}")
-            .output();
 
         let u = String::from_utf8(output3.unwrap().stdout).map_or(None, |mut x| {
             x.retain(|c| !c.is_whitespace());
@@ -172,11 +182,12 @@ fn get_unpushed_changes() -> UnpushedChanges {
     }
 }
 
-fn get_k8s_context() -> Option<String> {
+async fn get_k8s_context() -> Option<String> {
     let output = Command::new("kubectl")
         .arg("config")
         .arg("current-context")
-        .output();
+        .output()
+        .await;
 
     if output.is_err() {
         return Option::None
@@ -188,14 +199,15 @@ fn get_k8s_context() -> Option<String> {
     })
 }
 
-fn get_k8s_namespace() -> Option<String> {
+async fn get_k8s_namespace() -> Option<String> {
     let output = Command::new("kubectl")
         .arg("config")
         .arg("view")
         .arg("--minify")
         .arg("--output")
         .arg("jsonpath={..namespace}")
-        .output();
+        .output()
+        .await;
 
     if output.is_err() {
         return Option::None
@@ -215,7 +227,8 @@ fn get_aws_region() -> Option<String> {
     env::var("AWS_REGION").ok().or(env::var("AWS_DEFAULT_REGION").ok()).or(env::var("AWS_PROFILE_REGION").ok())
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let args = Args::parse();
 
     // Colored likes to follow the environment, however prompts appear like pipes and it disables
@@ -224,17 +237,10 @@ fn main() {
 
     let current_dir = get_current_working_directory();
 
-    let is_in_git_repostory = is_in_git_repository();
+    let is_in_git_repostory = is_in_git_repository().await;
 
-    let current_branch;
-    if is_in_git_repostory {
-        current_branch = get_best_git_name();
-    } else {
-        current_branch = "-".to_string();
-    }
-
-    let current_context = get_k8s_context().unwrap_or("-".to_string());
-    let current_namespace = get_k8s_namespace().unwrap_or("-".to_string());
+    let current_context_future = get_k8s_context().map(|c| c.unwrap_or("-".to_string()));
+    let current_namespace_future = get_k8s_namespace().map(|c| c.unwrap_or("-".to_string()));
 
     let aws_profile = get_aws_profile().unwrap_or("-".to_string());
     let aws_region = get_aws_region().unwrap_or("-".to_string());
@@ -244,17 +250,34 @@ fn main() {
         _ => "❯".red().bold()
     };
 
+    let current_context;
+    let current_namespace;
+    let current_branch;
     let chevron_b;
     let chevron_c;
     if is_in_git_repostory {
-        let unstaged_changes = get_unstaged_changes();
+        let current_branch_future = get_best_git_name();
+
+        let unstaged_changes_future = get_unstaged_changes();
+
+        let unpushed_changes_future = get_unpushed_changes();
+
+        let unstaged_changes;
+        let unpushed_changes;
+        (current_context, current_namespace, current_branch, unstaged_changes, unpushed_changes) = futures::join!(
+            current_context_future,
+            current_namespace_future,
+            current_branch_future,
+            unstaged_changes_future,
+            unpushed_changes_future
+        );
+
         chevron_b = match unstaged_changes {
             UnstagedChanges::None => "❯".green().bold(),
             UnstagedChanges::FilesChanged => "❯".yellow().bold(),
             UnstagedChanges::FilesNotAdded => "❯".blue().bold()
         };
 
-        let unpushed_changes = get_unpushed_changes();
         chevron_c = match unpushed_changes {
             UnpushedChanges::None => "❯".green().bold(),
             UnpushedChanges::UnpushedChanges => "❯".yellow().bold(),
@@ -262,8 +285,12 @@ fn main() {
             UnpushedChanges::NoUpstreamBranch => "❯".white().bold()
         };
     } else {
+        current_branch = "-".to_string();
+
         chevron_b = "❯".bold();
         chevron_c = "❯".bold();
+
+        (current_context, current_namespace) = futures::join!(current_context_future, current_namespace_future);
     }
 
     println!(

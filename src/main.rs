@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use async_process::Command;
 use clap::Parser;
 use colored::Colorize;
-use futures::FutureExt;
+use futures::{FutureExt, TryFutureExt};
 use homedir::get_my_home;
 
 #[derive(Parser, Debug)]
@@ -92,11 +92,7 @@ async fn get_git_branch() -> Option<String> {
 
     String::from_utf8(output.unwrap().stdout).map_or(None, |mut x| {
         x.retain(|c| !c.is_whitespace());
-        if x.len() == 0 {
-            None
-        } else {
-            Some(x)
-        }
+        Some(x)
     })
 }
 
@@ -112,17 +108,19 @@ async fn get_unstaged_changes() -> UnstagedChanges {
         .arg("--quiet")
         .output();
 
+    let output1_timed_future = tokio::time::timeout(std::time::Duration::from_millis(500), output1_future).unwrap_or_else(|e| Result::Err(e.into()));
+
     let output2_future = Command::new("git")
         .arg("diff")
         .arg("--cached")
         .arg("--quiet")
         .output();
 
-    if futures::try_join!(output1_future, output2_future).is_ok() {
+    if futures::try_join!(output1_timed_future, output2_future).is_ok() {
         let output3 = Command::new("git")
             .arg("ls-files")
             .arg("--other")
-            .arg("--directort")
+            .arg("--directory")
             .arg("--exclude-standard")
             .output()
             .await;

@@ -299,8 +299,7 @@ async fn main() {
         (current_context, current_namespace) = futures::join!(current_context_future, current_namespace_future);
     }
 
-    println!(
-        "\n{} {} {} {} {} {} {}\n{}{}{} ",
+    let top_line = vec![
         format!("{}", current_dir.display()).cyan().bold(),
         args.message.unwrap_or("".to_string()).green().bold(),
         current_branch.purple().bold(),
@@ -308,6 +307,11 @@ async fn main() {
         current_namespace.bright_blue().bold(),
         aws_profile.red().bold(),
         aws_region.red().bold(),
+    ];
+
+    println!(
+        "\n{}\n{}{}{} ",
+        top_line.iter().filter(|x| !x.is_empty()).map(|x| x.to_string()).collect::<Vec<_>>().join(" "),
         chevron_a,
         chevron_b,
         chevron_c

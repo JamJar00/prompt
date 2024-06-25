@@ -32,20 +32,24 @@ fn get_current_working_directory() -> PathBuf {
 }
 
 async fn is_in_git_repository() -> bool {
-    let output = Command::new("git")
+    let output_res = Command::new("git")
         .arg("rev-parse")
         .arg("--is-inside-work-tree")
         .output()
         .await;
 
-    if output.is_err() {
+    if let Ok(output) = output_res {
+        if output.status.success() {
+            String::from_utf8(output.stdout).map_or(false, |mut x| {
+                x.retain(|c| !c.is_whitespace());
+                x == "true"
+            })
+        } else {
+            return false
+        }
+    } else {
         return false
     }
-
-    String::from_utf8(output.unwrap().stdout).map_or(false, |mut x| {
-        x.retain(|c| !c.is_whitespace());
-        x == "true"
-    })
 }
 
 async fn get_best_git_name() -> String {
@@ -58,42 +62,50 @@ async fn get_best_git_name() -> String {
 }
 
 async fn get_git_tag() -> Option<String> {
-    let output = Command::new("git")
+    let output_res = Command::new("git")
         .arg("tag")
         .arg("--points-at")
         .arg("HEAD")
         .output()
         .await;
 
-    if output.is_err() {
-        return Option::None
-    }
-
-    String::from_utf8(output.unwrap().stdout).map_or(None, |mut x| {
-        x.retain(|c| !c.is_whitespace());
-        if x.len() == 0 {
-            None
+    if let Ok(output) = output_res {
+        if output.status.success() {
+            String::from_utf8(output.stdout).map_or(None, |mut x| {
+                x.retain(|c| !c.is_whitespace());
+                if x.len() == 0 {
+                    None
+                } else {
+                    Some(x)
+                }
+            })
         } else {
-            Some(x)
+            return None
         }
-    })
+    } else {
+        return None
+    }
 }
 
 async fn get_git_branch() -> Option<String> {
-    let output = Command::new("git")
+    let output_res = Command::new("git")
         .arg("branch")
         .arg("--show-current")
         .output()
         .await;
 
-    if output.is_err() {
-        return Option::None
+    if let Ok(output) = output_res {
+        if output.status.success() {
+            String::from_utf8(output.stdout).map_or(None, |mut x| {
+                x.retain(|c| !c.is_whitespace());
+                Some(x)
+            })
+        } else {
+            return None
+        }
+    } else {
+        return None
     }
-
-    String::from_utf8(output.unwrap().stdout).map_or(None, |mut x| {
-        x.retain(|c| !c.is_whitespace());
-        Some(x)
-    })
 }
 
 enum UnstagedChanges {
@@ -116,19 +128,23 @@ async fn get_unstaged_changes() -> UnstagedChanges {
         .arg("--quiet")
         .output();
 
-    if futures::try_join!(output1_timed_future, output2_future).is_ok() {
-        let output3 = Command::new("git")
-            .arg("ls-files")
-            .arg("--other")
-            .arg("--directory")
-            .arg("--exclude-standard")
-            .output()
-            .await;
+    if let Ok((output1, output2)) = futures::try_join!(output1_timed_future, output2_future) {
+        if output1.status.success() && output2.status.success() {
+            let output3 = Command::new("git")
+                .arg("ls-files")
+                .arg("--other")
+                .arg("--directory")
+                .arg("--exclude-standard")
+                .output()
+                .await;
 
-        if output3.map(|x| x.stdout.len() == 0).unwrap_or(false) {
-            return UnstagedChanges::None;
+            if output3.map(|x| x.stdout.len() == 0).unwrap_or(false) {
+                return UnstagedChanges::None;
+            } else {
+                return UnstagedChanges::FilesNotAdded;
+            }
         } else {
-            return UnstagedChanges::FilesNotAdded;
+            return UnstagedChanges::FilesChanged;
         }
     } else {
         return UnstagedChanges::FilesChanged;
@@ -195,10 +211,6 @@ async fn get_k8s_context() -> Option<String> {
         .output()
         .await;
 
-    if output.is_err() {
-        return Option::None
-    }
-
     String::from_utf8(output.unwrap().stdout).map_or(None, |mut x| {
         x.retain(|c| !c.is_whitespace());
         Some(x)
@@ -206,7 +218,7 @@ async fn get_k8s_context() -> Option<String> {
 }
 
 async fn get_k8s_namespace() -> Option<String> {
-    let output = Command::new("kubectl")
+    let output_res = Command::new("kubectl")
         .arg("config")
         .arg("view")
         .arg("--minify")
@@ -215,14 +227,18 @@ async fn get_k8s_namespace() -> Option<String> {
         .output()
         .await;
 
-    if output.is_err() {
-        return Option::None
+    if let Ok(output) = output_res {
+        if output.status.success() {
+            String::from_utf8(output.stdout).map_or(None, |mut x| {
+                x.retain(|c| !c.is_whitespace());
+                Some(x)
+            })
+        } else {
+            return None;
+        }
+    } else {
+        return None
     }
-
-    String::from_utf8(output.unwrap().stdout).map_or(None, |mut x| {
-        x.retain(|c| !c.is_whitespace());
-        Some(x)
-    })
 }
 
 fn get_aws_profile() -> Option<String> {

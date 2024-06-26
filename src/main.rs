@@ -54,11 +54,12 @@ async fn is_in_git_repository() -> bool {
 
 async fn get_best_git_name() -> String {
     let branch_future = get_git_branch();
+    let commit_future = get_git_commit();
     let tag_future = get_git_tag();
 
-    let (branch, tag) = futures::join!(branch_future, tag_future);
+    let (branch, commit, tag) = futures::join!(branch_future, commit_future, tag_future);
 
-    branch.unwrap_or("".to_owned()) + &tag.as_ref().map(|t| " [".to_string() + t + "]").unwrap_or("".to_string())
+    branch.unwrap_or(commit.unwrap_or("".to_owned())) + &tag.as_ref().map(|t| " [".to_string() + t + "]").unwrap_or("".to_string())
 }
 
 async fn get_git_tag() -> Option<String> {
@@ -98,7 +99,37 @@ async fn get_git_branch() -> Option<String> {
         if output.status.success() {
             String::from_utf8(output.stdout).map_or(None, |mut x| {
                 x.retain(|c| !c.is_whitespace());
-                Some(x)
+                if x.len() == 0 {
+                    None
+                } else {
+                    Some(x)
+                }
+            })
+        } else {
+            return None
+        }
+    } else {
+        return None
+    }
+}
+
+async fn get_git_commit() -> Option<String> {
+    let output_res = Command::new("git")
+        .arg("rev-parse")
+        .arg("--short")
+        .arg("HEAD")
+        .output()
+        .await;
+
+    if let Ok(output) = output_res {
+        if output.status.success() {
+            String::from_utf8(output.stdout).map_or(None, |mut x| {
+                x.retain(|c| !c.is_whitespace());
+                if x.len() == 0 {
+                    None
+                } else {
+                    Some(x)
+                }
             })
         } else {
             return None

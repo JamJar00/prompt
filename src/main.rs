@@ -17,6 +17,25 @@ struct Args {
     message: Option<String>,
 }
 
+fn parse_output(output_res: Result<async_process::Output, std::io::Error>) -> Option<String> {
+    if let Ok(output) = output_res {
+        if output.status.success() {
+            String::from_utf8(output.stdout).map_or(None, |mut x| {
+                x.retain(|c| !c.is_whitespace());
+                if x.len() == 0 {
+                    None
+                } else {
+                    Some(x)
+                }
+            })
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
 fn get_current_working_directory() -> PathBuf {
     let current_dir = env::current_dir().expect("No current working directory?");
 
@@ -38,18 +57,7 @@ async fn is_in_git_repository() -> bool {
         .output()
         .await;
 
-    if let Ok(output) = output_res {
-        if output.status.success() {
-            String::from_utf8(output.stdout).map_or(false, |mut x| {
-                x.retain(|c| !c.is_whitespace());
-                x == "true"
-            })
-        } else {
-            return false
-        }
-    } else {
-        return false
-    }
+    parse_output(output_res).map(|x| x == "true").unwrap_or(false)
 }
 
 async fn get_best_git_name() -> String {
@@ -70,22 +78,7 @@ async fn get_git_tag() -> Option<String> {
         .output()
         .await;
 
-    if let Ok(output) = output_res {
-        if output.status.success() {
-            String::from_utf8(output.stdout).map_or(None, |mut x| {
-                x.retain(|c| !c.is_whitespace());
-                if x.len() == 0 {
-                    None
-                } else {
-                    Some(x)
-                }
-            })
-        } else {
-            return None
-        }
-    } else {
-        return None
-    }
+    parse_output(output_res)
 }
 
 async fn get_git_branch() -> Option<String> {
@@ -95,22 +88,7 @@ async fn get_git_branch() -> Option<String> {
         .output()
         .await;
 
-    if let Ok(output) = output_res {
-        if output.status.success() {
-            String::from_utf8(output.stdout).map_or(None, |mut x| {
-                x.retain(|c| !c.is_whitespace());
-                if x.len() == 0 {
-                    None
-                } else {
-                    Some(x)
-                }
-            })
-        } else {
-            return None
-        }
-    } else {
-        return None
-    }
+    parse_output(output_res)
 }
 
 async fn get_git_commit() -> Option<String> {
@@ -121,22 +99,7 @@ async fn get_git_commit() -> Option<String> {
         .output()
         .await;
 
-    if let Ok(output) = output_res {
-        if output.status.success() {
-            String::from_utf8(output.stdout).map_or(None, |mut x| {
-                x.retain(|c| !c.is_whitespace());
-                if x.len() == 0 {
-                    None
-                } else {
-                    Some(x)
-                }
-            })
-        } else {
-            return None
-        }
-    } else {
-        return None
-    }
+    parse_output(output_res)
 }
 
 enum UnstagedChanges {
@@ -209,19 +172,9 @@ async fn get_unpushed_changes() -> UnpushedChanges {
 
         let (output2, output3) = futures::join!(output2_future, output3_future);
 
-        let head = String::from_utf8(output2.unwrap().stdout).map_or(None, |mut x| {
-            x.retain(|c| !c.is_whitespace());
-            Some(x)
-        });
+        let head = parse_output(output2);
 
-        let u = String::from_utf8(output3.unwrap().stdout).map_or(None, |mut x| {
-            x.retain(|c| !c.is_whitespace());
-            if x.len() == 0 {
-                None
-            } else {
-                Some(x)
-            }
-        });
+        let u = parse_output(output3);
 
         if u.is_none() {
             return UnpushedChanges::NoUpstreamBranch;
@@ -258,18 +211,7 @@ async fn get_k8s_namespace() -> Option<String> {
         .output()
         .await;
 
-    if let Ok(output) = output_res {
-        if output.status.success() {
-            String::from_utf8(output.stdout).map_or(None, |mut x| {
-                x.retain(|c| !c.is_whitespace());
-                Some(x)
-            })
-        } else {
-            return None;
-        }
-    } else {
-        return None
-    }
+    parse_output(output_res)
 }
 
 fn get_aws_profile() -> Option<String> {

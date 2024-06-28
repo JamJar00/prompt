@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use async_process::Command;
 use clap::Parser;
 use colored::Colorize;
-use futures::{FutureExt, TryFutureExt};
+use futures::TryFutureExt;
 use homedir::get_my_home;
 
 #[derive(Parser, Debug)]
@@ -60,14 +60,18 @@ async fn is_in_git_repository() -> bool {
     parse_output(output_res).map(|x| x == "true").unwrap_or(false)
 }
 
-async fn get_best_git_name() -> String {
+async fn get_best_git_name() -> Option<String> {
     let branch_future = get_git_branch();
     let commit_future = get_git_commit();
     let tag_future = get_git_tag();
 
     let (branch, commit, tag) = futures::join!(branch_future, commit_future, tag_future);
 
-    branch.unwrap_or(commit.unwrap_or("".to_owned())) + &tag.as_ref().map(|t| " [".to_string() + t + "]").unwrap_or("".to_string())
+    if branch.is_some() || commit.is_some() || tag.is_some() {
+        Some(branch.unwrap_or(commit.unwrap_or("".to_owned())) + &tag.as_ref().map(|t| " [".to_string() + t + "]").unwrap_or("".to_string()))
+    } else {
+        None
+    }
 }
 
 async fn get_git_tag() -> Option<String> {
@@ -234,11 +238,11 @@ async fn main() {
 
     let is_in_git_repostory = is_in_git_repository().await;
 
-    let current_context_future = get_k8s_context().map(|c| c.unwrap_or("-".to_string()));
-    let current_namespace_future = get_k8s_namespace().map(|c| c.unwrap_or("-".to_string()));
+    let current_context_future = get_k8s_context();
+    let current_namespace_future = get_k8s_namespace();
 
-    let aws_profile = get_aws_profile().unwrap_or("-".to_string());
-    let aws_region = get_aws_region().unwrap_or("-".to_string());
+    let aws_profile = get_aws_profile();
+    let aws_region = get_aws_region();
 
     let chevron_a = match args.exit_code {
         0 => "❯".green().bold(),
@@ -280,7 +284,7 @@ async fn main() {
             UnpushedChanges::NoUpstreamBranch => "❯".white().bold()
         };
     } else {
-        current_branch = "-".to_string();
+        current_branch = None;
 
         chevron_b = "❯".bold();
         chevron_c = "❯".bold();
@@ -289,18 +293,18 @@ async fn main() {
     }
 
     let top_line = vec![
-        format!("{}", current_dir.display()).cyan().bold(),
-        args.message.unwrap_or("".to_string()).green().bold(),
-        current_branch.purple().bold(),
-        current_context.bright_blue().bold(),
-        current_namespace.bright_blue().bold(),
-        aws_profile.red().bold(),
-        aws_region.red().bold(),
+        Some(format!("{}", current_dir.display()).cyan().bold()),
+        args.message.map(|x| x.green().bold()),
+        current_branch.map(|x| x.purple().bold()),
+        current_context.map(|x| x.bright_blue().bold()),
+        current_namespace.map(|x| x.bright_blue().bold()),
+        aws_profile.map(|x| x.red().bold()),
+        aws_region.map(|x| x.red().bold()),
     ];
 
     println!(
         "\n{}\n{}{}{} ",
-        top_line.iter().filter(|x| !x.is_empty()).map(|x| x.to_string()).collect::<Vec<_>>().join(" "),
+        top_line.iter().filter(|x| x.is_some()).map(|x| x.as_ref().unwrap().to_string()).collect::<Vec<_>>().join(" "),
         chevron_a,
         chevron_b,
         chevron_c

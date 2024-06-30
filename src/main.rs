@@ -193,16 +193,13 @@ async fn get_unpushed_changes() -> UnpushedChanges {
 }
 
 async fn get_k8s_context() -> Option<String> {
-    let output = Command::new("kubectl")
+    let output_res = Command::new("kubectl")
         .arg("config")
         .arg("current-context")
         .output()
         .await;
 
-    String::from_utf8(output.unwrap().stdout).map_or(None, |mut x| {
-        x.retain(|c| !c.is_whitespace());
-        Some(x)
-    })
+    parse_output(output_res)
 }
 
 async fn get_k8s_namespace() -> Option<String> {

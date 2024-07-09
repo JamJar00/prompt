@@ -192,6 +192,16 @@ async fn get_unpushed_changes() -> UnpushedChanges {
     }
 }
 
+async fn get_git_errors() -> bool {
+    let output_res = Command::new("git")
+        .arg("diff")
+        .arg("--check")
+        .output()
+        .await;
+
+    return output_res.map_or(true, |x| !x.status.success())
+}
+
 async fn get_k8s_context() -> Option<String> {
     let output_res = Command::new("kubectl")
         .arg("config")
@@ -249,6 +259,7 @@ async fn main() {
     let current_context;
     let current_namespace;
     let current_branch;
+    let git_errors;
     let chevron_b;
     let chevron_c;
     if is_in_git_repostory {
@@ -258,14 +269,17 @@ async fn main() {
 
         let unpushed_changes_future = get_unpushed_changes();
 
+        let git_errors_future = get_git_errors();
+
         let unstaged_changes;
         let unpushed_changes;
-        (current_context, current_namespace, current_branch, unstaged_changes, unpushed_changes) = futures::join!(
+        (current_context, current_namespace, current_branch, unstaged_changes, unpushed_changes, git_errors) = futures::join!(
             current_context_future,
             current_namespace_future,
             current_branch_future,
             unstaged_changes_future,
-            unpushed_changes_future
+            unpushed_changes_future,
+            git_errors_future
         );
 
         chevron_b = match unstaged_changes {
@@ -282,6 +296,7 @@ async fn main() {
         };
     } else {
         current_branch = None;
+        git_errors = false;
 
         chevron_b = "❯".bold();
         chevron_c = "❯".bold();
@@ -293,6 +308,7 @@ async fn main() {
         Some(format!("{}", current_dir.display()).cyan().bold()),
         args.message.map(|x| x.green().bold()),
         current_branch.map(|x| x.purple().bold()),
+        if git_errors { Some("\u{26A0}\u{FE0F}".red().bold()) } else { None },
         current_context.map(|x| x.bright_blue().bold()),
         current_namespace.map(|x| x.bright_blue().bold()),
         aws_profile.map(|x| x.red().bold()),

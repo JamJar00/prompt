@@ -60,6 +60,39 @@ async fn is_in_git_repository() -> bool {
     parse_output(output_res).map(|x| x == "true").unwrap_or(false)
 }
 
+enum GitState {
+    Rebase,
+    ApplyMailbox,
+    ApplyMailboxOrRebase,
+    Merge,
+    Revert,
+    CherryPick,
+    Bisect
+}
+
+fn get_git_state() -> Option<GitState> {
+    let git_dir = Path::new("./.git");
+
+    // Taken from libgit https://github.com/libgit2/libgit2/blob/585b5dacc7f440a163c20117cfa35fb714a7ba7b/src/repository.c#L2713
+    if git_dir.join("rebase-apply").join("rebasing").is_file() {
+		Some(GitState::Rebase)
+    } else if git_dir.join("rebase-apply").join("applying").is_file() {
+		Some(GitState::ApplyMailbox)
+    } else if git_dir.join("rebase-apply").is_dir() {
+		Some(GitState::ApplyMailboxOrRebase)
+    } else if git_dir.join("MERGE_HEAD").is_file() {
+		Some(GitState::Merge)
+    } else if git_dir.join("REVERT_HEAD").is_file() {
+        Some(GitState::Revert)
+	} else if git_dir.join("CHERRY_PICK_HEAD").is_file() {
+        Some(GitState::CherryPick)
+	} else if git_dir.join("BISECT_LOG").is_file() {
+        Some(GitState::Bisect)
+    } else {
+        None
+    }
+}
+
 async fn get_best_git_name() -> Option<String> {
     let branch_future = get_git_branch();
     let commit_future = get_git_commit();
@@ -259,10 +292,13 @@ async fn main() {
     let current_context;
     let current_namespace;
     let current_branch;
+    let git_state;
     let git_errors;
     let chevron_b;
     let chevron_c;
     if is_in_git_repostory {
+        git_state = get_git_state();
+
         let current_branch_future = get_best_git_name();
 
         let unstaged_changes_future = get_unstaged_changes();
@@ -295,6 +331,7 @@ async fn main() {
             UnpushedChanges::NoUpstreamBranch => "❯".white().bold()
         };
     } else {
+        git_state = None;
         current_branch = None;
         git_errors = false;
 
@@ -304,11 +341,23 @@ async fn main() {
         (current_context, current_namespace) = futures::join!(current_context_future, current_namespace_future);
     }
 
+    // Not really sure what some of these git states are but they seem important
+    let git_state = git_state.map(|s| match s {
+        GitState::Rebase => "(rebase)",
+        GitState::ApplyMailbox => "(AM)",
+        GitState::ApplyMailboxOrRebase => "(AM/rebase)",
+        GitState::Merge => "(merge)",
+        GitState::Revert => "(revert)",
+        GitState::CherryPick => "(cherry-pick)",
+        GitState::Bisect => "(bisect)"
+    });
+
     let top_line = vec![
         Some(format!("{}", current_dir.display()).cyan().bold()),
         args.message.map(|x| x.green().bold()),
         current_branch.map(|x| x.purple().bold()),
-        if git_errors { Some("\u{26A0}\u{FE0F}".red().bold()) } else { None },
+        git_state.map(|x| x.purple().bold()),
+        if git_errors { Some("\u{26A0}\u{FE0F}".bold()) } else { None },
         current_context.map(|x| x.bright_blue().bold()),
         current_namespace.map(|x| x.bright_blue().bold()),
         aws_profile.map(|x| x.red().bold()),

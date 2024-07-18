@@ -15,6 +15,9 @@ struct Args {
 
     #[arg(short, long)]
     message: Option<String>,
+
+    #[arg(long)]
+    explain: bool,
 }
 
 fn parse_output(output_res: Result<async_process::Output, std::io::Error>) -> Option<String> {
@@ -352,23 +355,32 @@ async fn main() {
         GitState::Bisect => "(bisect)"
     });
 
-    let top_line = vec![
-        Some(format!("{}", current_dir.display()).cyan().bold()),
-        args.message.map(|x| x.green().bold()),
-        current_branch.map(|x| x.purple().bold()),
-        git_state.map(|x| x.purple().bold()),
-        if git_errors { Some("\u{26A0}\u{FE0F}".bold()) } else { None },
-        current_context.map(|x| x.bright_blue().bold()),
-        current_namespace.map(|x| x.bright_blue().bold()),
-        aws_profile.map(|x| x.red().bold()),
-        aws_region.map(|x| x.red().bold()),
-    ];
+    if args.explain {
+        println!(
+            "\n    {}{}{}\n    ││└ Exit code\n    │└─ Unstaged changes (yellow)/Untracked files (blue)\n    └── Unpushed changes (yellow)/Unpulled changes (blue)/No upstream (white)",
+            chevron_a,
+            chevron_b,
+            chevron_c
+        );
+    } else {
+        let top_line = vec![
+            Some(format!("{}", current_dir.display()).cyan().bold()),
+            args.message.map(|x| x.green().bold()),
+            current_branch.map(|x| x.purple().bold()),
+            git_state.map(|x| x.purple().bold()),
+            if git_errors { Some("\u{26A0}\u{FE0F}".bold()) } else { None },
+            current_context.map(|x| x.bright_blue().bold()),
+            current_namespace.map(|x| x.bright_blue().bold()),
+            aws_profile.map(|x| x.red().bold()),
+            aws_region.map(|x| x.red().bold()),
+        ];
 
-    println!(
-        "\n{}\n{}{}{} ",
-        top_line.iter().filter(|x| x.is_some()).map(|x| x.as_ref().unwrap().to_string()).collect::<Vec<_>>().join(" "),
-        chevron_a,
-        chevron_b,
-        chevron_c
-    );
+        println!(
+            "\n{}\n{}{}{} ",
+            top_line.iter().filter(|x| x.is_some()).map(|x| x.as_ref().unwrap().to_string()).collect::<Vec<_>>().join(" "),
+            chevron_a,
+            chevron_b,
+            chevron_c
+        );
+    }
 }

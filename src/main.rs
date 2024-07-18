@@ -165,6 +165,7 @@ async fn get_unstaged_changes() -> UnstagedChanges {
                 .arg("ls-files")
                 .arg("--other")
                 .arg("--exclude-standard")
+                .arg("--deleted")
                 .output()
                 .await;
 

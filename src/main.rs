@@ -164,7 +164,6 @@ async fn get_unstaged_changes() -> UnstagedChanges {
             let output3 = Command::new("git")
                 .arg("ls-files")
                 .arg("--other")
-                .arg("--directory")
                 .arg("--exclude-standard")
                 .output()
                 .await;

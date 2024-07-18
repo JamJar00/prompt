@@ -357,7 +357,7 @@ async fn main() {
 
     if args.explain {
         println!(
-            "\n    {}{}{}\n    ││└ Exit code\n    │└─ Unstaged changes (yellow)/Untracked files (blue)\n    └── Unpushed changes (yellow)/Unpulled changes (blue)/No upstream (white)",
+            "\n    {}{}{}\n    ││└ Unpushed changes (yellow)/Unpulled changes (blue)/No upstream (white)\n    │└─ Unstaged changes (yellow)/Untracked files (blue)\n    └── Exit code",
             chevron_a,
             chevron_b,
             chevron_c

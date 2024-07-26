@@ -142,13 +142,13 @@ async fn get_git_commit() -> Option<String> {
     parse_output(output_res)
 }
 
-enum UnstagedChanges {
+enum UncommittedChanges {
     None,
     FilesChanged,
     FilesNotAdded
 }
 
-async fn get_unstaged_changes() -> UnstagedChanges {
+async fn get_uncommitted_changes() -> UncommittedChanges {
     let output1_future = Command::new("git")
         .arg("diff")
         .arg("--quiet")
@@ -173,15 +173,15 @@ async fn get_unstaged_changes() -> UnstagedChanges {
                 .await;
 
             if output3.map(|x| x.stdout.len() == 0).unwrap_or(false) {
-                return UnstagedChanges::None;
+                return UncommittedChanges::None;
             } else {
-                return UnstagedChanges::FilesNotAdded;
+                return UncommittedChanges::FilesNotAdded;
             }
         } else {
-            return UnstagedChanges::FilesChanged;
+            return UncommittedChanges::FilesChanged;
         }
     } else {
-        return UnstagedChanges::FilesChanged;
+        return UncommittedChanges::FilesChanged;
     }
 }
 
@@ -304,27 +304,27 @@ async fn main() {
 
         let current_branch_future = get_best_git_name();
 
-        let unstaged_changes_future = get_unstaged_changes();
+        let uncommitted_changes_future = get_uncommitted_changes();
 
         let unpushed_changes_future = get_unpushed_changes();
 
         let git_errors_future = get_git_errors();
 
-        let unstaged_changes;
+        let uncommitted_changes;
         let unpushed_changes;
-        (current_context, current_namespace, current_branch, unstaged_changes, unpushed_changes, git_errors) = futures::join!(
+        (current_context, current_namespace, current_branch, uncommitted_changes, unpushed_changes, git_errors) = futures::join!(
             current_context_future,
             current_namespace_future,
             current_branch_future,
-            unstaged_changes_future,
+            uncommitted_changes_future,
             unpushed_changes_future,
             git_errors_future
         );
 
-        chevron_b = match unstaged_changes {
-            UnstagedChanges::None => "❯".green().bold(),
-            UnstagedChanges::FilesChanged => "❯".yellow().bold(),
-            UnstagedChanges::FilesNotAdded => "❯".blue().bold()
+        chevron_b = match uncommitted_changes {
+            UncommittedChanges::None => "❯".green().bold(),
+            UncommittedChanges::FilesChanged => "❯".yellow().bold(),
+            UncommittedChanges::FilesNotAdded => "❯".blue().bold()
         };
 
         chevron_c = match unpushed_changes {
@@ -357,7 +357,7 @@ async fn main() {
 
     if args.explain {
         println!(
-            "\n    {}{}{}\n    ││└ Unpushed changes (yellow)/Unpulled changes (blue)/No upstream (white)\n    │└─ Unstaged changes (yellow)/Untracked files (blue)\n    └── Exit code",
+            "\n    {}{}{}\n    ││└ Unpushed changes (yellow)/Unpulled changes (blue)/No upstream (white)\n    │└─ Uncommitted changes (yellow)/Untracked files (blue)\n    └── Exit code",
             chevron_a,
             chevron_b,
             chevron_c

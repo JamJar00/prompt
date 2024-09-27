@@ -238,6 +238,16 @@ async fn get_git_errors() -> bool {
     return output_res.map_or(true, |x| !x.status.success())
 }
 
+async fn get_git_unmerged() -> usize {
+    let output_res = Command::new("git")
+        .arg("status")
+        .arg("--porcelain")
+        .output()
+        .await;
+
+    return parse_output(output_res).map_or(0, |x| x.split("\n").filter(|y| y.starts_with("UU")).count());
+}
+
 async fn get_k8s_context() -> Option<String> {
     let output_res = Command::new("kubectl")
         .arg("config")
@@ -297,6 +307,7 @@ async fn main() {
     let current_branch;
     let git_state;
     let git_errors;
+    let git_unmerged;
     let chevron_b;
     let chevron_c;
     if is_in_git_repostory {
@@ -310,15 +321,18 @@ async fn main() {
 
         let git_errors_future = get_git_errors();
 
+        let git_unmerged_future = get_git_unmerged();
+
         let uncommitted_changes;
         let unpushed_changes;
-        (current_context, current_namespace, current_branch, uncommitted_changes, unpushed_changes, git_errors) = futures::join!(
+        (current_context, current_namespace, current_branch, uncommitted_changes, unpushed_changes, git_errors, git_unmerged) = futures::join!(
             current_context_future,
             current_namespace_future,
             current_branch_future,
             uncommitted_changes_future,
             unpushed_changes_future,
-            git_errors_future
+            git_errors_future,
+            git_unmerged_future
         );
 
         chevron_b = match uncommitted_changes {
@@ -337,6 +351,7 @@ async fn main() {
         git_state = None;
         current_branch = None;
         git_errors = false;
+        git_unmerged = 0;
 
         chevron_b = "❯".bold();
         chevron_c = "❯".bold();
@@ -369,6 +384,7 @@ async fn main() {
             current_branch.map(|x| x.purple().bold()),
             git_state.map(|x| x.purple().bold()),
             if git_errors { Some("\u{26A0}\u{FE0F}".bold()) } else { None },
+            if git_unmerged > 0 { Some(format!("({})", git_unmerged).purple().bold()) } else { None },
             current_context.map(|x| x.bright_blue().bold()),
             current_namespace.map(|x| x.bright_blue().bold()),
             aws_profile.map(|x| x.red().bold()),

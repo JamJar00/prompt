@@ -18,6 +18,9 @@ struct Args {
 
     #[arg(long)]
     explain: bool,
+
+    #[arg(long)]
+    iterm2: bool,
 }
 
 fn parse_output(output_res: Result<async_process::Output, std::io::Error>) -> Option<String> {
@@ -64,6 +67,8 @@ async fn is_in_git_repository() -> bool {
 }
 
 enum GitState {
+    RebaseInteractive,
+    RebaseMerge,
     Rebase,
     ApplyMailbox,
     ApplyMailboxOrRebase,
@@ -76,8 +81,12 @@ enum GitState {
 fn get_git_state() -> Option<GitState> {
     let git_dir = Path::new("./.git");
 
-    // Taken from libgit https://github.com/libgit2/libgit2/blob/585b5dacc7f440a163c20117cfa35fb714a7ba7b/src/repository.c#L2713
-    if git_dir.join("rebase-apply").join("rebasing").is_file() {
+    // Taken from libgit https://github.com/libgit2/libgit2/blob/main/src/libgit2/repository.c#L3697 - git_repository_state function
+    if git_dir.join("rebase-merge").join("interactive").is_file() {
+		Some(GitState::RebaseInteractive)
+    } else if git_dir.join("rebase-merge").is_dir() {
+		Some(GitState::RebaseMerge)
+    } else if git_dir.join("rebase-apply").join("rebasing").is_file() {
 		Some(GitState::Rebase)
     } else if git_dir.join("rebase-apply").join("applying").is_file() {
 		Some(GitState::ApplyMailbox)
@@ -361,6 +370,8 @@ async fn main() {
 
     // Not really sure what some of these git states are but they seem important
     let git_state = git_state.map(|s| match s {
+        GitState::RebaseInteractive => "(interactive rebase)",
+        GitState::RebaseMerge => "(rebase merge)",
         GitState::Rebase => "(rebase)",
         GitState::ApplyMailbox => "(AM)",
         GitState::ApplyMailboxOrRebase => "(AM/rebase)",
@@ -392,7 +403,8 @@ async fn main() {
         ];
 
         println!(
-            "\n{}\n{}{}{} ",
+            "\n{}{}\n{}{}{} ",
+            if args.iterm2 { "\x1b]1337;SetMark\x07 " } else { "" },
             top_line.iter().filter(|x| x.is_some()).map(|x| x.as_ref().unwrap().to_string()).collect::<Vec<_>>().join(" "),
             chevron_a,
             chevron_b,

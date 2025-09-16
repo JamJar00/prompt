@@ -8,7 +8,6 @@ Download the latest build of the prompt from GitHub actions and store it on your
 
 For bash, add the following to your `~/.bashrc` file:
 ```bash
-# Set prompt
 if [ "$TERM_PROGRAM" = "iTerm.app" ]
     export PS1='$(prompt --exit-code $? --iterm2)'
 else
@@ -16,7 +15,7 @@ else
 fi
 ```
 
-For fish, add the following to your `~/.config/fish/fish.config`
+For fish, add the following to your `~/.config/fish/config.fish`
 ```fish
 function fish_prompt
   if [ "$TERM_PROGRAM" = "iTerm.app" ]

@@ -1,8 +1,11 @@
-name: Build
+name: Publish
 on:
   push:
-    branches:
-      - main
+    tags:
+      - '**'
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -23,3 +26,17 @@ jobs:
         with:
           name: prompt
           path: target/release/prompt
+          retention-days: 1
+
+  publish:
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: prompt
+          path: prompt
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: prompt

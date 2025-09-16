@@ -35,7 +35,6 @@ jobs:
       - uses: actions/download-artifact@v5
         with:
           name: prompt
-          path: prompt
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
